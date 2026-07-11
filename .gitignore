@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+.venv/
+venv/
+
+# Environment variables
+.env
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Logs
+logs/
+*.log
+
+# MLflow
+mlruns/
+
+# Python cache
+.pytest_cache/
+.mypy_cache/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Hugging Face cache
+.cache/
+.huggingface/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Models
+models/model.safetensors
+*.safetensors

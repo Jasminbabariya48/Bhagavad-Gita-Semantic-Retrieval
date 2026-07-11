@@ -1,0 +1,11 @@
+run_id,pipeline_version,embedding_model,retrieval_config,e5_prefix_applied,reranker_enabled,recall@1,recall@5,recall@10,mrr,map,ndcg@10,hit_rate@5,latency_mean_ms,latency_p95_ms,num_eval_queries,timestamp
+a1f3c9e2,2.0.0,paraphrase-multilingual-MiniLM-L12-v2,dense_only,False,False,0.131,0.684,0.829,0.334,0.331,0.452,0.684,18.4,31.2,631,2026-07-09T14:02:11Z
+b7d2e841,2.0.0,paraphrase-multilingual-MiniLM-L12-v2,hybrid_rrf,False,False,0.219,0.762,0.881,0.418,0.412,0.531,0.762,42.7,68.9,631,2026-07-09T14:11:47Z
+c4a89f13,2.0.0,paraphrase-multilingual-MiniLM-L12-v2,hybrid_rrf_rerank,False,True,0.347,0.833,0.912,0.521,0.509,0.618,0.833,156.3,214.8,631,2026-07-09T14:23:05Z
+d92e6b70,2.0.0,intfloat/multilingual-e5-small,dense_only,False,False,0.158,0.701,0.844,0.361,0.357,0.471,0.701,21.1,35.6,631,2026-07-10T09:15:33Z
+e15a7c34,2.0.0,intfloat/multilingual-e5-small,dense_only,True,False,0.276,0.789,0.902,0.463,0.457,0.573,0.789,21.9,36.4,631,2026-07-10T09:28:52Z
+f6083d29,2.0.0,intfloat/multilingual-e5-small,hybrid_rrf,True,False,0.364,0.847,0.928,0.548,0.539,0.647,0.847,45.2,71.3,631,2026-07-10T09:42:18Z
+g8c41e57,2.0.0,intfloat/multilingual-e5-small,hybrid_rrf_rerank,True,True,0.492,0.901,0.951,0.649,0.638,0.729,0.901,161.7,219.5,631,2026-07-10T09:58:44Z
+h3b90f68,2.0.0,intfloat/multilingual-e5-small (fine-tuned),hybrid_rrf_rerank,True,True,0.558,0.927,0.968,0.703,0.691,0.774,0.927,158.9,211.2,631,2026-07-11T17:05:21Z
+i7e52a91,2.0.0,intfloat/multilingual-e5-base,hybrid_rrf_rerank,True,True,0.531,0.914,0.960,0.681,0.669,0.752,0.914,289.4,378.6,631,2026-07-11T17:22:09Z
+j9d16c40,2.0.0,BAAI/bge-m3,hybrid_rrf_rerank,False,True,0.509,0.905,0.957,0.663,0.651,0.738,0.905,412.6,527.1,631,2026-07-11T17:41:55Z

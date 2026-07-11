@@ -1,0 +1,76 @@
+project:
+  name: "immverse_ai"
+  seed: 42
+
+paths:
+  raw_dataset: "data/raw/gita_clean.csv"
+  processed_dataset: "data/processed/cleaned_dataset.csv"
+  query_pairs: "data/training/query_pairs.csv"
+  triplets: "data/training/triplets.csv"
+  models_dir: "models"
+  faiss_dir: "faiss_store"
+  faiss_index: "faiss_store/faiss.index"
+  metadata: "faiss_store/metadata.pkl"
+  documents: "faiss_store/documents.pkl"
+  bm25_index: "faiss_store/bm25.pkl"
+  evaluation_dir: "outputs/evaluation"
+  error_analysis_dir: "outputs/error_analysis"
+
+dataset:
+  # Column names as produced by src/data_prep.py
+  id_column: "unique_key"
+  sanskrit_column: "sanskrit_data"
+  translation_column: "translation"
+  document_column: "document"       # sanskrit + translation, concatenated text used for indexing
+
+
+embedding:
+  active_model: "models"
+  candidates:
+    - "models"
+
+  use_e5_prefixes: true
+  normalize_embeddings: true
+  batch_size: 32
+
+training:
+  loss: "MultipleNegativesRankingLoss"   
+  epochs: 2
+  batch_size: 16
+  warmup_ratio: 0.1
+  learning_rate: 2.0e-5
+  output_subdir: "trained_model"
+
+evaluation:
+  k_values: [1, 5, 10]
+  ndcg_k: 10
+  map_k: 10
+
+retrieval:
+  dense_top_k: 50
+  bm25_top_k: 50
+  rrf_k: 60          # RRF damping constant
+  fusion_top_n: 20    # candidates passed to the reranker
+  final_top_k: 5       # results returned to the user
+
+query_expansion:
+  enabled: true
+  max_expansion_terms: 5
+  # simple static thesaurus used when no external LLM is configured
+  synonyms_path: "config/query_synonyms.yaml"
+
+reranker:
+  enabled: true
+  model_name: "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+  batch_size: 16
+
+mlflow:
+  tracking_uri: "http://127.0.0.1:5000"
+  experiment_name: "Embedding_Model_Training"
+  comparison_experiment_name: "Embedding_Model_Comparison"
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+
+pipeline_version: "2.0.0"

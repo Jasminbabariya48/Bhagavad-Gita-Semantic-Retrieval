@@ -1,0 +1,78 @@
+# ============================================================================
+# Static thesaurus for query expansion (src/query_expansion.py).
+# Keys are lowercase trigger words found in a user query; values are terms
+# appended to the query before retrieval. Keep lists short and on-topic —
+# noisy expansion hurts retrieval more than it helps.
+# ============================================================================
+
+anger:
+  - mind
+  - self control
+  - discipline
+  - emotion
+
+mind:
+  - control
+  - discipline
+  - meditation
+  - senses
+
+karma:
+  - action
+  - duty
+  - work
+  - detachment
+
+dharma:
+  - duty
+  - righteousness
+  - virtue
+  - moral law
+
+yoga:
+  - discipline
+  - union
+  - meditation
+  - practice
+
+atman:
+  - soul
+  - self
+  - consciousness
+  - eternal
+
+devotion:
+  - bhakti
+  - surrender
+  - worship
+  - faith
+
+detachment:
+  - renunciation
+  - non-attachment
+  - equanimity
+  - letting go
+
+fear:
+  - courage
+  - anxiety
+  - worry
+  - protection
+
+death:
+  - soul
+  - rebirth
+  - immortality
+  - impermanence
+
+knowledge:
+  - wisdom
+  - jnana
+  - understanding
+  - truth
+
+desire:
+  - attachment
+  - craving
+  - senses
+  - control
