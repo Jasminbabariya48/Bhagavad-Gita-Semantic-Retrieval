@@ -225,6 +225,8 @@ metrics — all pure-Python/numpy, so no model downloads are required to run
 - The notebook's referenced `01_data_preprocessing.ipynb` was not present in
   the export — `src/preprocessing.py` reconstructs that step from the
   `cleaned_dataset.csv` schema the later notebooks assume.
-#   B h a g a v a d - G i t a - S e m a n t i c - R e t r i e v a l  
- #   B h a g a v a d - G i t a - S e m a n t i c - R e t r i e v a l  
+#   B h a g a v a d - G i t a - S e m a n t i c - R e t r i e v a l 
+ 
+ #   B h a g a v a d - G i t a - S e m a n t i c - R e t r i e v a l 
+ 
  
