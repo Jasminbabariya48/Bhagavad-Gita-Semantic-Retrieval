@@ -1,509 +1,178 @@
 # 🕉️ Bhagavad Gita Semantic Retrieval System
 
-A production-ready **semantic search and retrieval system for Bhagavad Gita verses** that retrieves the most relevant Sanskrit verses along with their English translations based on natural language queries.
+A fine-tuned, multilingual semantic retrieval system that takes a natural-language
+question — in English or Sanskrit — and returns the most relevant Bhagavad Gita
+verse, its Sanskrit text, and its English translation/commentary.
 
-The system understands the **semantic meaning** behind user questions rather than relying only on keyword matching. Users can ask philosophical or life-related questions, and the system retrieves the most contextually relevant verses from the Bhagavad Gita.
+This is **not** a chatbot. There is no generation step and no hallucination
+surface — every answer is a verse that actually exists in the corpus, ranked by
+a fine-tuned embedding model plus a hybrid dense+lexical retrieval pipeline.
 
-Example:
-
-**User Query:**
-
-> How can I control my mind?
-
-**System Response:**
-
-Returns the most relevant Bhagavad Gita verse with:
-- Sanskrit verse
-- English translation
-- Similarity score
-- Contextual information
-
+```
+"How to control the mind?"  ─────►  Verse 6.35, Sanskrit text, English translation, similarity score
+```
 
 ---
 
-# 🚀 Project Highlights
+## 1. What this project actually does
 
-- Built a semantic retrieval engine from scratch
-- Converted Bhagavad Gita verses into meaningful vector embeddings
-- Implemented similarity-based retrieval using FAISS
-- Improved retrieval quality using advanced NLP techniques
-- Modular pipeline design for scalability
-- Designed for future integration with RAG-based conversational AI systems
+| Stage | What happens | Where |
+|---|---|---|
+| Data acquisition | Pull 657 verse/translation pairs from a public HF dataset | `data.ipynb` |
+| Preprocessing | Clean text, dedupe, build a unified `document` field | `Data_preprocessing.ipynb`, `src/preprocessing.py` |
+| Training data generation | Turn each verse into ~6 (query, document) pairs, then triplets | `src/query_pairs.py`, `src/triplet_generation.py` |
+| Fine-tuning | Fine-tune `intfloat/multilingual-e5-small` with contrastive loss | `src/trainer.py` |
+| Indexing | Encode all 657 documents, build a FAISS index + BM25 index | `src/faiss_builder.py`, `src/bm25_search.py` |
+| Retrieval | Dense + BM25 → Reciprocal Rank Fusion → cross-encoder rerank | `src/retrieval.py`, `src/hybrid_search.py`, `src/rrf.py`, `src/reranker.py` |
+| Evaluation | Recall@K, MRR, nDCG, MAP, Hit Rate, latency, model comparison | `src/evaluator.py`, `scripts/run_compare_models.py` |
+| Demo | Streamlit UI + CLI query tool | `app/streamlit_app.py`, `scripts/run_query.py` |
 
+## 2. The headline result
 
----
+Ten configurations were benchmarked end-to-end on the same 3,942-query
+evaluation set (see `outputs/evaluation/model_comparison_leaderboard.csv` and
+[`docs/EVALUATION.md`](docs/EVALUATION.md) for the full breakdown):
 
-# 🎯 Motivation
+| Configuration | Recall@1 | Recall@5 | MRR | nDCG@10 |
+|---|---|---|---|---|
+| MiniLM, dense-only (baseline) | 0.131 | 0.684 | 0.334 | 0.452 |
+| e5-small, dense-only, e5 prefixes | 0.276 | 0.789 | 0.463 | 0.573 |
+| e5-small, hybrid (dense + BM25 + RRF) | 0.364 | 0.847 | 0.548 | 0.647 |
+| e5-small, hybrid + reranker | 0.492 | 0.901 | 0.649 | 0.729 |
+| **e5-small, fine-tuned, hybrid + reranker** | **0.558** | **0.927** | **0.703** | **0.774** |
 
-Traditional keyword-based search systems fail when users ask questions using different words but with the same meaning.
+Fine-tuning plus the full pipeline **more than quadrupled Recall@1** (0.131 →
+0.558) over the naive single-stage baseline the project started from. Every
+stage in that chain — e5 prefixing, hybrid search, reranking, fine-tuning —
+contributed a measurable improvement; none of it was redundant. The full
+reasoning behind this is in [`docs/EVALUATION.md`](docs/EVALUATION.md).
 
-Example:
+## 3. Why the pipeline looks the way it does
 
-Keyword Search:
-
-```
-"control mind"
-```
-
-may not retrieve:
-
-```
-"How can one achieve mastery over thoughts?"
-```
-
-because the words are different.
-
-Semantic retrieval solves this problem by understanding the meaning of the query.
-
-
----
-
-# 🏗️ System Architecture
-
-
-```
-                 User Query
-                     |
-                     ↓
-          Query Preprocessing
-                     |
-                     ↓
-          Query Expansion
-                     |
-                     ↓
-        Sentence Transformer Model
-                     |
-                     ↓
-          Query Embedding Vector
-                     |
-                     ↓
-              FAISS Search
-                     |
-                     ↓
-          Similarity Ranking
-                     |
-                     ↓
-        Top Relevant Bhagavad Gita
-               Verses Retrieved
-                     |
-                     ↓
-        Sanskrit Verse + Translation
-```
-
-
----
-
-# 🔥 Features
-
-## 1. Semantic Search
-
-Uses transformer-based embeddings to understand the meaning of queries.
-
-Example:
-
-Query:
+A single bi-encoder similarity score has a ceiling: it has to compress lexical
+overlap and semantic meaning into one number, which is exactly why the
+baseline's Recall@5 was reasonable (0.684 — the right verse is *usually*
+nearby) but Recall@1 was weak (0.131 — it rarely won outright). The fix isn't
+a better single model, it's separating concerns:
 
 ```
-How to overcome fear?
+User Query
+    │
+    ▼
+Preprocessing (unicode / whitespace normalize)
+    │
+    ▼
+Query Expansion  (config/query_synonyms.yaml)
+    │
+    ├─────────────────────┬─────────────────────┐
+    ▼                      ▼
+Dense Search (FAISS)   BM25 Search (rank_bm25)
+top 50                 top 50
+    │                      │
+    └──────────┬───────────┘
+               ▼
+    Reciprocal Rank Fusion (RRF, k=60)
+               │
+               ▼
+             top 20
+               │
+               ▼
+    Cross-Encoder Re-ranking
+               │
+               ▼
+             top 5
+               │
+               ▼
+   Verse ID · Similarity · Sanskrit · Translation
 ```
 
-can retrieve verses related to:
+Dense retrieval catches semantic paraphrase ("control the mind" ≈ "restrain
+the senses"); BM25 catches exact-term matches dense embeddings sometimes blur
+together (Sanskrit proper nouns, repeated key terms). RRF fuses the two
+rankings by *position*, not raw score, so neither retriever needs score
+calibration against the other. The cross-encoder then reads each
+(query, candidate) pair jointly — far more accurate than cosine similarity,
+but too slow to run over the whole corpus, which is why it only ever sees the
+fused top-20, not the full index.
+
+Full architectural reasoning: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## 4. The dataset
+
+657 Bhagavad Gita verses pulled from the `Mercity/bhagavad_gita-embeddings`
+dataset on Hugging Face, each with the original Sanskrit and an English
+field that — this matters — is not a literal one-line translation but a
+full Prabhupada-style purport/commentary, averaging **~1,620 characters**
+per verse (up to 15,600). That single fact shapes several downstream
+decisions (chunking, document construction, embedding truncation risk) —
+see [`docs/DATASET.md`](docs/DATASET.md) for the full data-quality writeup.
+
+## 5. Project structure
 
 ```
-Courage, detachment, self-control, and mental strength
-```
-
-
----
-
-## 2. Vector-Based Retrieval
-
-Each Bhagavad Gita verse is converted into a numerical vector representation.
-
-The system compares:
-
-```
-Query Embedding
-        |
-        |
-        ↓
-Verse Embeddings
-```
-
-using similarity metrics.
-
-
----
-
-## 3. FAISS Similarity Search
-
-Implemented Facebook AI Similarity Search (FAISS) for efficient nearest-neighbor retrieval.
-
-Advantages:
-
-- Fast vector search
-- Scalable to large datasets
-- Low latency retrieval
-
-
----
-
-## 4. Query Enhancement
-
-The retrieval pipeline improves user queries through:
-
-- Text normalization
-- Query expansion
-- Synonym handling
-- Context enrichment
-
-
----
-
-# 🔄 Retrieval Pipeline
-
-
-## Step 1: Data Processing
-
-The Bhagavad Gita dataset contains:
-
-- Chapter number
-- Verse number
-- Sanskrit text
-- Transliteration
-- English translation
-
-
-Processing steps:
-
-- Data cleaning
-- Text normalization
-- Removing unnecessary characters
-- Preparing searchable documents
-
-
----
-
-## Step 2: Text Embedding Generation
-
-Each verse is converted into embeddings using:
-
-```
-Sentence Transformer Model
-```
-
-Example:
-
-```
-Verse Text
-     |
-     ↓
-Embedding Model
-     |
-     ↓
-Dense Vector Representation
-```
-
-
----
-
-## Step 3: Index Creation
-
-Generated embeddings are stored in FAISS index.
-
-Example:
-
-```
-Verse 2.47
-     |
-     ↓
-[0.234, 0.541, 0.123 ...]
-```
-
-
----
-
-## Step 4: Query Retrieval
-
-When a user enters a question:
-
-```
-User Question
-      |
-      ↓
-Embedding Generation
-      |
-      ↓
-FAISS Similarity Search
-      |
-      ↓
-Top-K Relevant Verses
-```
-
-
----
-
-# 🧠 Technologies Used
-
-
-## Programming Language
-
-- Python
-
-
-## NLP / Deep Learning
-
-- Sentence Transformers
-- Transformers
-- Natural Language Processing
-
-
-## Vector Database
-
-- FAISS
-
-
-## Data Processing
-
-- Pandas
-- NumPy
-
-
-## Development Tools
-
-- Jupyter Notebook
-- Git
-- GitHub
-
-
----
-
-# 📂 Project Structure
-
-
-```
-Bhagavad-Gita-Semantic-Retrieval/
-
-│
+Retrival_Sys/
+├── config/
+│   ├── config.yaml            # every path, model name, hyperparameter
+│   └── query_synonyms.yaml    # static thesaurus for query expansion
 ├── data/
-│   └── bhagavad_gita_dataset.csv
-│
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_embedding_generation.ipynb
-│   ├── 03_vector_search.ipynb
-│   └── 04_evaluation.ipynb
-│
-├── src/
-│   ├── preprocessing.py
-│   ├── embedding.py
-│   ├── retrieval.py
-│   └── evaluation.py
-│
-├── tests/
-│
-├── requirements.txt
-│
-├── README.md
-│
-└── .gitignore
-
+│   ├── raw/                   # bhagavad_gita.csv / gita_clean.csv/json — HF export
+│   ├── processed/             # cleaned_dataset.csv, documents.csv
+│   └── training/              # query_pairs.csv (3,942 rows), triplets.csv
+├── models/                    # fine-tuned SentenceTransformer checkpoint (multilingual-e5-small base)
+├── checkpoints/                # training checkpoints
+├── faiss_store/                # faiss.index, bm25.pkl, metadata.pkl, documents.pkl
+├── notebooks/                  # 7 exploratory notebooks — kept for provenance
+├── src/                        # production modules (see docs/ARCHITECTURE.md)
+├── app/streamlit_app.py        # interactive demo UI
+├── scripts/                    # one CLI entrypoint per pipeline stage
+├── tests/                      # pytest unit tests (pure logic, no model downloads)
+├── outputs/evaluation/         # model_comparison_leaderboard.csv and friends
+├── data.ipynb                  # dataset download from Hugging Face
+├── Data_preprocessing.ipynb    # cleaning + document construction (prototype)
+└── requirements.txt
 ```
 
-
----
-
-# ⚙️ Installation
-
-
-Clone the repository:
+## 6. Running it
 
 ```bash
-git clone https://github.com/Jasminbabariya48/Bhagavad-Gita-Semantic-Retrieval.git
-```
-
-
-Move into project directory:
-
-```bash
-cd Bhagavad-Gita-Semantic-Retrieval
-```
-
-
-Create virtual environment:
-
-```bash
-python -m venv .venv
-```
-
-
-Activate environment:
-
-
-Windows:
-
-```bash
-.venv\Scripts\activate
-```
-
-
-Linux/Mac:
-
-```bash
-source .venv/bin/activate
-```
-
-
-Install dependencies:
-
-```bash
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+
+# 1. Clean the raw dataset
+python scripts/run_preprocessing.py
+
+# 2. Generate training pairs and triplets
+python scripts/run_generate_query_pairs.py
+python scripts/run_generate_triplets.py
+
+# 3. Fine-tune the embedding model
+python scripts/run_train.py --model intfloat/multilingual-e5-small --epochs 2
+
+# 4. Build the FAISS + BM25 indexes
+python scripts/run_build_index.py
+
+# 5. Evaluate
+python scripts/run_evaluate.py
+
+# 6. Compare configurations (dense-only / hybrid / hybrid+rerank / fine-tuned)
+python scripts/run_compare_models.py
+
+# 7. Query it
+python scripts/run_query.py
+# or
+streamlit run app/streamlit_app.py
 ```
 
-
----
-
-# ▶️ Usage
-
-
-Run the retrieval pipeline:
-
-```bash
-python src/retrieval.py
-```
-
-
-Example:
-
-
-Input:
-
-```
-What is the importance of karma?
-```
-
-
-Output:
-
-```
-Chapter: 2
-Verse: 47
-
-Sanskrit:
-कर्मण्येवाधिकारस्ते...
-
-Translation:
-You have the right to perform your duties...
-```
-
-
----
-
-# 📊 Evaluation
-
-The retrieval system can be evaluated using:
-
-
-## Retrieval Metrics
-
-- Precision@K
-- Recall@K
-- Mean Reciprocal Rank (MRR)
-
-
-## Similarity Evaluation
-
-- Cosine Similarity
-- Ranking Accuracy
-
-
-Example:
-
-```
-Query:
-How to achieve peace?
-
-Retrieved:
-Chapter 2 Verse 70
-
-Similarity Score:
-0.89
-```
-
-
----
-
-# 🚀 Future Improvements
-
-
-## 1. Retrieval-Augmented Generation (RAG)
-
-Integrate Large Language Models to generate human-like answers using retrieved verses.
-
-
-## 2. Hybrid Search
-
-Combine:
-
-- Keyword search
-- Semantic search
-
-
-for better retrieval accuracy.
-
-
-## 3. Re-ranking Model
-
-Add cross-encoder based ranking:
-
-```
-Bi-Encoder Retrieval
-        |
-        ↓
-Cross Encoder Re-ranking
-        |
-        ↓
-Final Results
-```
-
-
-## 4. Web Application
-
-Deploy using:
-
-- Flask
-- FastAPI
-- Streamlit
-
-
----
-
-# 🌟 Learning Outcomes
-
-Through this project:
-
-- Understanding of semantic search systems
-- Practical implementation of embeddings
-- Vector database handling
-- NLP pipeline development
-- Information retrieval techniques
-- Foundation for RAG applications
-
-
----
-
-# 👨‍💻 Author
-
-**Jasmin Babariya**
-
-Data Scientist | AI/ML Engineer
-
-GitHub:
-https://github.com/Jasminbabariya48
-
-
----
-
-# 📜 License
-
-This project is developed for educational and research purposes.
+## 7. Further reading
+
+- [`docs/DATASET.md`](docs/DATASET.md) — where the data came from, what
+  cleaning was applied, and the data-quality quirks that shaped later
+  decisions (the "translation is actually a commentary" issue, in
+  particular).
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — module-by-module
+  breakdown of the retrieval pipeline and the reasoning behind each design
+  choice.
+- [`docs/EVALUATION.md`](docs/EVALUATION.md) — the full ten-run leaderboard,
+  what each stage bought in isolation, and an honest discussion of where the
+  system still fails (Recall@1 sits at 0.558, not 1.0 — that gap is
+  analyzed, not hidden).
